@@ -81,8 +81,9 @@ yarn hardhat --network localhost run ./scripts/Airdrop.ts
 - **Owner controls** restrict admin actions to the contract deployer.
 
 ## Scripting Sample Image
+<img width="923" alt="airdrop_merkle_tree" src="https://github.com/user-attachments/assets/98283c29-a229-4a30-9bf4-b37a32124f57" />
 
-![Airdrop Execution](./airdrop_merkle_tree.png)
+
 
 
 
