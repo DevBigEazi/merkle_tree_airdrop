@@ -9,41 +9,44 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
+// Custom errors for gas optimization
+error HasAlreadyClaimedAirdrop();
+error NotOwner();
+error AddressZeroDetected();
+error AirdropNotActive();
+error AirdropIsPaused();
+error InvalidTimeRange();
+
 contract Airdrop is ReentrancyGuard {
     using SafeERC20 for IERC20;
+    IERC20 public immutable tokenAddress;
 
     bytes32 public merkleRootHash;
-    IERC20 public immutable tokenAddress;
     address public owner;
-    
     uint256 public airdropStartTime;
     uint256 public airdropEndTime;
     bool public isPaused;
 
     mapping(address => bool) public hasClaimed;
-    
-    // Custom errors for gas optimization
-    error HasAlreadyClaimedAirdrop();
-    error NotOwner();
-    error AddressZeroDetected();
-    error AirdropNotActive();
-    error AirdropIsPaused();
-    error InvalidTimeRange();
-    
-    event AirdropClaimed(address indexed claimer, uint256 amountClaimed, uint256 timestamp);
+
+    event AirdropClaimed(
+        address indexed claimer,
+        uint256 amountClaimed,
+        uint256 timestamp
+    );
     event AirdropRemBalWithdrawn(uint256 tokenBalance, string successMessage);
     event AirdropPaused(bool isPaused);
     event AirdropTimeUpdated(uint256 startTime, uint256 endTime);
     event MerkleRootUpdated(bytes32 newRoot);
-    
+
     modifier onlyOwner() {
         if (msg.sender != owner) {
             revert NotOwner();
         }
-        
+
         _;
     }
-    
+
     modifier whenNotPaused() {
         if (isPaused) {
             revert AirdropIsPaused();
@@ -51,9 +54,12 @@ contract Airdrop is ReentrancyGuard {
 
         _;
     }
-    
+
     modifier isAirdropActive() {
-        if (block.timestamp < airdropStartTime || block.timestamp > airdropEndTime) {
+        if (
+            block.timestamp < airdropStartTime ||
+            block.timestamp > airdropEndTime
+        ) {
             revert AirdropNotActive();
         }
         _;
@@ -67,7 +73,7 @@ contract Airdrop is ReentrancyGuard {
     ) {
         if (_tokenAddress == address(0)) revert AddressZeroDetected();
         if (_startTime >= _endTime) revert InvalidTimeRange();
-        
+
         tokenAddress = IERC20(_tokenAddress);
         merkleRootHash = _merkleRootHash;
         owner = msg.sender;
@@ -75,32 +81,41 @@ contract Airdrop is ReentrancyGuard {
         airdropEndTime = _endTime;
     }
 
-    function claimAirdrop(uint256 _amount, bytes32[] calldata _merkleProof) 
-        external 
-        whenNotPaused 
-        isAirdropActive
-    {
+    function claimAirdrop(
+        uint256 _amount,
+        bytes32[] calldata _merkleProof
+    ) external whenNotPaused isAirdropActive {
         if (msg.sender == address(0)) revert AddressZeroDetected();
         if (hasClaimed[msg.sender]) revert HasAlreadyClaimedAirdrop();
 
         bytes32 leaf = keccak256(abi.encodePacked(msg.sender, _amount));
-        bool proofValid = MerkleProof.verify(_merkleProof, merkleRootHash, leaf);
+        bool proofValid = MerkleProof.verify(
+            _merkleProof,
+            merkleRootHash,
+            leaf
+        );
         require(proofValid, "Invalid Merkle proof");
 
         hasClaimed[msg.sender] = true;
 
-        require(tokenAddress.balanceOf(address(this)) >= _amount, "Insufficient balance");
+        require(
+            tokenAddress.balanceOf(address(this)) >= _amount,
+            "Insufficient balance"
+        );
         tokenAddress.safeTransfer(msg.sender, _amount);
-    
+
         emit AirdropClaimed(msg.sender, _amount, block.timestamp);
     }
 
-    function updateMerkleRoot(bytes32 _merkleRootHash) external onlyOwner {
-        merkleRootHash = _merkleRootHash;
-        emit MerkleRootUpdated(_merkleRootHash);
-    }
+    // function updateMerkleRoot(bytes32 _merkleRootHash) external onlyOwner {
+    //     merkleRootHash = _merkleRootHash;
+    //     emit MerkleRootUpdated(_merkleRootHash);
+    // }
 
-    function setAirdropTiming(uint256 _startTime, uint256 _endTime) external onlyOwner {
+    function setAirdropTiming(
+        uint256 _startTime,
+        uint256 _endTime
+    ) external onlyOwner {
         if (_startTime >= _endTime) revert InvalidTimeRange();
         airdropStartTime = _startTime;
         airdropEndTime = _endTime;
@@ -115,7 +130,7 @@ contract Airdrop is ReentrancyGuard {
     function withdrawRemainingTokens() external onlyOwner {
         uint256 tokenBalance = tokenAddress.balanceOf(address(this));
         require(tokenBalance > 0, "No tokens to withdraw");
-        
+
         tokenAddress.safeTransfer(owner, tokenBalance);
         emit AirdropRemBalWithdrawn(tokenBalance, "Withdrawal successful");
     }
